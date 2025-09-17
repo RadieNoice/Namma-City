@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import VoiceInput from './VoiceInput';
+import ChatWidget from './ChatWidget';
 import supabase from '../helper/supabaseClient';
 import { ISSUE_CATEGORIES } from '../helper/issueClassifier';
 
@@ -10,6 +11,7 @@ const IssueForm = ({ onSubmit, onCancel }) => {
   const [location, setLocation] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [chatMode, setChatMode] = useState(false);
 
   const handleVoiceInput = (data) => {
     setDescription(data.description);
@@ -133,6 +135,30 @@ const IssueForm = ({ onSubmit, onCancel }) => {
             />
           </div>
 
+          <div className="mb-4">
+            <button
+              type="button"
+              className="btn btn-outline-primary w-100"
+              onClick={() => setChatMode(!chatMode)}
+            >
+              <i className={`bi bi-chat${chatMode ? '-fill' : ''} me-2`}></i>
+              {chatMode ? 'Hide Chat Assistant' : 'Use Chat Assistant'}
+            </button>
+
+            {chatMode && (
+              <div className="mt-3">
+                <ChatWidget
+                  onSubmit={async (response) => {
+                    if (response.action === 'confirm_new') {
+                      setDescription(response.description || '');
+                      setSeverity(response.routingInfo.priority || 'medium');
+                      await handleSubmit(new Event('submit'));
+                    }
+                  }}
+                />
+              </div>
+            )}
+          </div>
 
           <div className="d-flex justify-content-end gap-2">
             <button

@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import supabase from "../helper/supabaseClient";
-import IssueCard from "../components/IssueCard";
-import IssueForm from "../components/IssueForm";
-import { useAuth } from "../helper/AuthContext";
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import supabase from '../helper/supabaseClient';
+import IssueCard from '../components/IssueCard';
+import IssueForm from '../components/IssueForm';
+import ChatWidget from '../components/ChatWidget';
+import { useAuth } from '../helper/AuthContext';
 
 function Dashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -16,14 +17,15 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [sortOrder, setSortOrder] = useState("newest");
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [sortOrder, setSortOrder] = useState('newest');
   const [showNewIssueForm, setShowNewIssueForm] = useState(false);
+  const [activeTab, setActiveTab] = useState('issues');
 
   const fetchAll = async () => {
     if (authLoading) return;
     if (!user) {
-      setError("You must be logged in to view your issues.");
+      setError('You must be logged in to view your issues.');
       setLoading(false);
       return;
     }
@@ -31,97 +33,67 @@ function Dashboard() {
     setLoading(true);
     setError(null);
 
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, username, department_id")
-      .eq("id", user.id)
-      .single();
+    try {
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, username, department_id')
+        .eq('id', user.id)
+        .single();
 
-    if (profileError || !profileData) {
-      setError("Failed to load user profile.");
-      setLoading(false);
-      return;
-    }
-    setUserProfile(profileData);
+      if (profileError) throw profileError;
+      setUserProfile(profileData);
 
-    if (!profileData.department_id) {
-      setError("No department assigned to this profile. Please update your profile.");
-      setLoading(false);
-      return;
-    }
+      if (!profileData.department_id) {
+        throw new Error('No department assigned to this profile.');
+      }
 
-    const { data: deptData, error: deptError } = await supabase
-      .from("departments")
-      .select("id, department_name")
-      .eq("id", profileData.department_id)
-      .single();
+      const { data: deptData, error: deptError } = await supabase
+        .from('departments')
+        .select('id, department_name')
+        .eq('id', profileData.department_id)
+        .single();
 
-    if (deptError || !deptData) {
-      setError("Failed to load department data.");
-      setLoading(false);
-      return;
-    }
-    setDepartment(deptData);
+      if (deptError) throw deptError;
+      setDepartment(deptData);
 
-    const { data: usersData, error: usersError } = await supabase
-      .from("profiles")
-      .select("id, username")
-      .eq("department_id", profileData.department_id);
+      const { data: usersData } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .eq('department_id', profileData.department_id);
 
-    if (usersError) {
-      console.error("Failed to load department users:", usersError);
-    } else {
       setDepartmentUsers(usersData || []);
-    }
 
-    let query = supabase
-      .from("issues")
-      .select(
-        "id, title, description, issue_type, created_at, latitude, longitude, status, department_id, user_id, image_url, departments(id,department_name), profiles(id, username)"
-      )
-      .eq("department_id", profileData.department_id);
+      let query = supabase
+        .from('issues')
+        .select('*, departments(id,department_name), profiles(id, username)')
+        .eq('department_id', profileData.department_id);
 
-    if (filterStatus !== "all") {
-      query = query.eq("status", filterStatus);
-    }
+      if (filterStatus !== 'all') {
+        query = query.eq('status', filterStatus);
+      }
 
-    if (sortOrder === "newest") {
-      query = query.order("created_at", { ascending: false });
-    } else if (sortOrder === "oldest") {
-      query = query.order("created_at", { ascending: true });
-    } else if (sortOrder === "alphabetical") {
-      query = query.order("title", { ascending: true });
-    }
+      switch (sortOrder) {
+        case 'newest':
+          query = query.order('created_at', { ascending: false });
+          break;
+        case 'oldest':
+          query = query.order('created_at', { ascending: true });
+          break;
+        case 'alphabetical':
+          query = query.order('title', { ascending: true });
+          break;
+      }
 
-    const { data: issuesData, error: issuesError } = await query;
+      const { data: issuesData, error: issuesError } = await query;
+      if (issuesError) throw issuesError;
 
-    if (issuesError) {
-      setError(issuesError.message);
+      setIssues(issuesData || []);
+    } catch (err) {
+      setError(err.message);
       setIssues([]);
-    } else {
-      const normalized = (issuesData || []).map((i) => {
-        let deptName = null;
-        if (i.departments) {
-          if (Array.isArray(i.departments)) {
-            deptName = i.departments[0]?.department_name ?? null;
-          } else if (typeof i.departments === "object") {
-            deptName = i.departments.department_name ?? null;
-          }
-        }
-        deptName = deptName || i.issue_department || i.department_name || null;
-        const city = i.issue_city || deptName || null;
-
-        return {
-          ...i,
-          department_name: deptName,
-          issue_city: city,
-        };
-      });
-
-      setIssues(normalized);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -131,10 +103,10 @@ function Dashboard() {
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
-      console.error("Logout error:", error.message);
+      console.error('Logout error:', error.message);
       return;
     }
-    navigate("/Login");
+    navigate('/Login');
   };
 
   if (authLoading || loading) {
@@ -157,11 +129,11 @@ function Dashboard() {
           <div className="row justify-content-center">
             <div className="col-md-6">
               <div className="alert alert-danger text-center" role="alert">
-                <i className="bi bi-exclamation-triangle-fill fs-1 text-danger mb-3"></i>
+                <i className="bi bi-exclamation-triangle-fill fs-1 text-danger mb-3" />
                 <h4 className="alert-heading">Error</h4>
                 <p>{error}</p>
                 <hr />
-                <button className="btn btn-outline-danger" onClick={() => navigate("/Login")}>
+                <button className="btn btn-outline-danger" onClick={() => navigate('/Login')}>
                   Back to Login
                 </button>
               </div>
@@ -174,15 +146,14 @@ function Dashboard() {
 
   return (
     <div className="min-vh-100 bg-light">
-      {/* Dashboard Header */}
       <nav className="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
         <div className="container-fluid">
           <button className="btn btn-outline-light d-lg-none me-2" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <i className="bi bi-list"></i>
+            <i className="bi bi-list" />
           </button>
 
           <span className="navbar-brand fw-bold">
-            <i className="bi bi-speedometer2 me-2"></i>
+            <i className="bi bi-speedometer2 me-2" />
             <span className="d-none d-sm-inline">NammaCity Dashboard</span>
             <span className="d-sm-none">Dashboard</span>
           </span>
@@ -195,7 +166,7 @@ function Dashboard() {
                 role="button"
                 data-bs-toggle="dropdown"
               >
-                <i className="bi bi-person-circle me-2"></i>
+                <i className="bi bi-person-circle me-2" />
                 <span className="d-none d-md-inline">{userProfile?.username ?? user?.email}</span>
               </a>
               <ul className="dropdown-menu dropdown-menu-end">
@@ -206,12 +177,10 @@ function Dashboard() {
                     <strong>{department?.department_name}</strong>
                   </span>
                 </li>
-                <li>
-                  <hr className="dropdown-divider" />
-                </li>
+                <li><hr className="dropdown-divider" /></li>
                 <li>
                   <button className="dropdown-item text-danger" onClick={handleLogout}>
-                    <i className="bi bi-box-arrow-right me-2"></i>
+                    <i className="bi bi-box-arrow-right me-2" />
                     Logout
                   </button>
                 </li>
@@ -221,17 +190,15 @@ function Dashboard() {
         </div>
       </nav>
 
-      {/* Dashboard Content */}
       <div className="container-fluid py-4">
         <div className="row">
-          {/* Sidebar */}
-          <div className={`col-lg-3 col-xl-2 mb-4 ${sidebarOpen ? "d-block" : "d-none d-lg-block"}`}>
+          <div className={`col-lg-3 col-xl-2 mb-4 ${sidebarOpen ? 'd-block' : 'd-none d-lg-block'}`}>
             <div className="card border-0 shadow-sm">
               <div className="card-body">
                 <h6 className="card-title text-muted text-uppercase fw-bold mb-3">Quick Stats</h6>
                 <div className="d-flex align-items-center mb-3">
                   <div className="bg-primary bg-opacity-10 rounded-circle p-2 me-3">
-                    <i className="bi bi-exclamation-triangle text-primary"></i>
+                    <i className="bi bi-exclamation-triangle text-primary" />
                   </div>
                   <div>
                     <div className="fw-bold">{issues.length}</div>
@@ -240,19 +207,19 @@ function Dashboard() {
                 </div>
                 <div className="d-flex align-items-center mb-3">
                   <div className="bg-success bg-opacity-10 rounded-circle p-2 me-3">
-                    <i className="bi bi-check-circle text-success"></i>
+                    <i className="bi bi-check-circle text-success" />
                   </div>
                   <div>
-                    <div className="fw-bold">{issues.filter((issue) => issue.status === "resolved").length}</div>
+                    <div className="fw-bold">{issues.filter((issue) => issue.status === 'resolved').length}</div>
                     <small className="text-muted">Resolved</small>
                   </div>
                 </div>
                 <div className="d-flex align-items-center">
                   <div className="bg-warning bg-opacity-10 rounded-circle p-2 me-3">
-                    <i className="bi bi-clock text-warning"></i>
+                    <i className="bi bi-clock text-warning" />
                   </div>
                   <div>
-                    <div className="fw-bold">{issues.filter((issue) => issue.status !== "resolved").length}</div>
+                    <div className="fw-bold">{issues.filter((issue) => issue.status !== 'resolved').length}</div>
                     <small className="text-muted">Pending</small>
                   </div>
                 </div>
@@ -260,125 +227,174 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* Main Content */}
           <div className="col-lg-9 col-xl-10">
-            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-              <div>
-                <h2 className="fw-bold text-dark mb-1">Welcome back, {userProfile?.username ?? "User"}!</h2>
-                <p className="text-muted mb-0">
-                  Managing issues for <strong>{department?.department_name}</strong>
-                </p>
-              </div>
-              <div className="d-flex gap-2 flex-wrap">
-                {/* Filter Buttons */}
-                <div className="btn-group" role="group">
-                  <button
-                    type="button"
-                    className={`btn ${filterStatus === "all" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setFilterStatus("all")}
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${filterStatus === "pending" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setFilterStatus("pending")}
-                  >
-                    Pending
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${filterStatus === "resolved" ? "btn-primary" : "btn-outline-primary"}`}
-                    onClick={() => setFilterStatus("resolved")}
-                  >
-                    Resolved
-                  </button>
-                </div>
-                
-                {/* New Issue Button */}
+            <ul className="nav nav-tabs mb-4">
+              <li className="nav-item">
                 <button
-                  className="btn btn-success"
-                  onClick={() => setShowNewIssueForm(true)}
+                  className={`nav-link ${activeTab === 'issues' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('issues')}
                 >
-                  <i className="bi bi-plus-lg me-2"></i>
-                  New Issue
+                  <i className="bi bi-list-task me-2" />
+                  Manage Issues
                 </button>
-
-                {/* Sorting Dropdown */}
-                <div className="btn-group">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary dropdown-toggle"
-                    data-bs-toggle="dropdown"
-                    aria-expanded="false"
-                  >
-                    Sort
-                  </button>
-                  <ul className="dropdown-menu">
-                    <li>
-                      <a className="dropdown-item" href="#" onClick={() => setSortOrder("newest")}>
-                        Newest First
-                      </a>
-                    </li>
-                    <li>
-                      <a className="dropdown-item" href="#" onClick={() => setSortOrder("oldest")}>
-                        Oldest First
-                      </a>
-                    </li>
-                    <li>
-                      <a className="dropdown-item" href="#" onClick={() => setSortOrder("alphabetical")}>
-                        A-Z
-                      </a>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {showNewIssueForm && (
-              <div className="mb-4">
-                <IssueForm
-                  onSubmit={(issue) => {
-                    setShowNewIssueForm(false);
-                    fetchAll();
-                  }}
-                  onCancel={() => setShowNewIssueForm(false)}
-                />
-              </div>
-            )}
-
-            {issues.length === 0 && !showNewIssueForm ? (
-              <div className="text-center py-5">
-                <div
-                  className="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
-                  style={{ width: "80px", height: "80px" }}
-                >
-                  <i className="bi bi-inbox text-muted fs-1"></i>
-                </div>
-                <h4 className="text-muted mb-2">No Issues Found</h4>
-                <p className="text-muted">
-                  No issues have been reported for your department ({department?.department_name}) yet.
-                </p>
+              </li>
+              <li className="nav-item">
                 <button
-                  className="btn btn-primary mt-3"
-                  onClick={() => setShowNewIssueForm(true)}
+                  className={`nav-link ${activeTab === 'status' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('status')}
                 >
-                  <i className="bi bi-plus-lg me-2"></i>
-                  Report an Issue
+                  <i className="bi bi-chat-dots me-2" />
+                  Status Lookup
                 </button>
-              </div>
-            ) : (
-              <div className="row g-4">
-                {issues.map((issue, index) => (
-                  <div key={issue.id} className="col-12 col-xl-6">
-                    <IssueCard 
-                        issue={issue} 
-                        index={index} 
-                        onUpdate={fetchAll} 
-                        departmentUsers={departmentUsers} 
+              </li>
+            </ul>
+
+            {activeTab === 'issues' ? (
+              <>
+                <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+                  <div>
+                    <h2 className="fw-bold text-dark mb-1">Welcome back, {userProfile?.username ?? 'User'}!</h2>
+                    <p className="text-muted mb-0">
+                      Managing issues for <strong>{department?.department_name}</strong>
+                    </p>
+                  </div>
+                  <div className="d-flex gap-2 flex-wrap">
+                    <div className="btn-group" role="group">
+                      <button
+                        type="button"
+                        className={`btn ${filterStatus === 'all' ? 'btn-primary' : 'btn-outline-primary'}`}
+                        onClick={() => setFilterStatus('all')}
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn ${filterStatus === 'pending' ? 'btn-primary' : 'btn-outline-primary'}`}
+                        onClick={() => setFilterStatus('pending')}
+                      >
+                        Pending
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn ${filterStatus === 'resolved' ? 'btn-primary' : 'btn-outline-primary'}`}
+                        onClick={() => setFilterStatus('resolved')}
+                      >
+                        Resolved
+                      </button>
+                    </div>
+                    
+                    <button
+                      className="btn btn-success"
+                      onClick={() => setShowNewIssueForm(true)}
+                    >
+                      <i className="bi bi-plus-lg me-2" />
+                      New Issue
+                    </button>
+
+                    <div className="btn-group">
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary dropdown-toggle"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                      >
+                        Sort
+                      </button>
+                      <ul className="dropdown-menu">
+                        <li>
+                          <button className="dropdown-item" onClick={() => setSortOrder('newest')}>
+                            Newest First
+                          </button>
+                        </li>
+                        <li>
+                          <button className="dropdown-item" onClick={() => setSortOrder('oldest')}>
+                            Oldest First
+                          </button>
+                        </li>
+                        <li>
+                          <button className="dropdown-item" onClick={() => setSortOrder('alphabetical')}>
+                            A-Z
+                          </button>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {showNewIssueForm && (
+                  <div className="mb-4">
+                    <IssueForm
+                      onSubmit={(issue) => {
+                        setShowNewIssueForm(false);
+                        fetchAll();
+                      }}
+                      onCancel={() => setShowNewIssueForm(false)}
                     />
                   </div>
-                ))}
+                )}
+
+                {issues.length === 0 && !showNewIssueForm ? (
+                  <div className="text-center py-5">
+                    <div
+                      className="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                      style={{ width: '80px', height: '80px' }}
+                    >
+                      <i className="bi bi-inbox text-muted fs-1" />
+                    </div>
+                    <h4 className="text-muted mb-2">No Issues Found</h4>
+                    <p className="text-muted">
+                      No issues have been reported for your department ({department?.department_name}) yet.
+                    </p>
+                    <button
+                      className="btn btn-primary mt-3"
+                      onClick={() => setShowNewIssueForm(true)}
+                    >
+                      <i className="bi bi-plus-lg me-2" />
+                      Report an Issue
+                    </button>
+                  </div>
+                ) : (
+                  <div className="row g-4">
+                    {issues.map((issue) => (
+                      <div key={issue.id} className="col-12 col-xl-6">
+                        <IssueCard 
+                          issue={issue} 
+                          onUpdate={fetchAll} 
+                          departmentUsers={departmentUsers} 
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="row justify-content-center">
+                <div className="col-md-8 col-lg-6">
+                  <div className="card border-0 shadow-sm">
+                    <div className="card-body">
+                      <h5 className="card-title mb-4">
+                        <i className="bi bi-chat-dots me-2" />
+                        Issue Status Assistant
+                      </h5>
+                      <p className="text-muted mb-4">
+                        Ask about any issue you've reported. You can ask questions like:
+                      </p>
+                      <ul className="mt-2 mb-4">
+                        <li>What's the status of my garbage collection issue?</li>
+                        <li>Any updates on my pothole report?</li>
+                        <li>Show me all my pending issues</li>
+                      </ul>
+                      <ChatWidget
+                        onSubmit={(response) => {
+                          if (response.action === 'show_issue' && response.issueId) {
+                            setActiveTab('issues');
+                            // Could add logic here to highlight the specific issue
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
