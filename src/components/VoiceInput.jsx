@@ -1,15 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+import React, { useState, useEffect, useCallback } from 'react';
 
 const VoiceInput = ({ onTranscriptComplete, onError }) => {
   const [isListening, setIsListening] = useState(false);
   const [location, setLocation] = useState(null);
-  
-  const {
-    transcript,
-    resetTranscript,
-    browserSupportsSpeechRecognition
-  } = useSpeechRecognition();
+  const [transcript, setTranscript] = useState('');
+  const [recognition, setRecognition] = useState(null);
+
+  useEffect(() => {
+    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognitionInstance = new SpeechRecognition();
+      recognitionInstance.continuous = true;
+      recognitionInstance.interimResults = true;
+
+      recognitionInstance.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map(result => result[0])
+          .map(result => result.transcript)
+          .join('');
+        setTranscript(transcript);
+      };
+
+      recognitionInstance.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        onError?.('Error with speech recognition');
+        setIsListening(false);
+      };
+
+      setRecognition(recognitionInstance);
+    } else {
+      onError?.('Speech recognition not supported in this browser');
+    }
+  }, []);
 
   useEffect(() => {
     // Get user's location when component mounts
@@ -29,20 +51,28 @@ const VoiceInput = ({ onTranscriptComplete, onError }) => {
     }
   }, []);
 
-  const startListening = async () => {
+  const startListening = useCallback(() => {
+    if (!recognition) {
+      onError?.('Speech recognition not initialized');
+      return;
+    }
+
     try {
-      resetTranscript();
+      setTranscript('');
       setIsListening(true);
-      await SpeechRecognition.startListening({ continuous: true });
+      recognition.start();
     } catch (error) {
       console.error('Error starting speech recognition:', error);
       onError?.('Could not start voice recording');
+      setIsListening(false);
     }
-  };
+  }, [recognition]);
 
-  const stopListening = async () => {
+  const stopListening = useCallback(() => {
+    if (!recognition) return;
+
     try {
-      await SpeechRecognition.stopListening();
+      recognition.stop();
       setIsListening(false);
       if (transcript && location) {
         onTranscriptComplete({
@@ -55,9 +85,9 @@ const VoiceInput = ({ onTranscriptComplete, onError }) => {
       console.error('Error stopping speech recognition:', error);
       onError?.('Error processing voice input');
     }
-  };
+  }, [recognition, transcript, location]);
 
-  if (!browserSupportsSpeechRecognition) {
+  if (!recognition) {
     return (
       <div className="alert alert-warning">
         <i className="bi bi-exclamation-triangle me-2"></i>
