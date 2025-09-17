@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import VoiceInput from './VoiceInput';
 import supabase from '../helper/supabaseClient';
 import { ISSUE_CATEGORIES } from '../helper/issueClassifier';
+import aiAgent from '../helper/AIAgentService';
 
 const IssueForm = ({ onSubmit, onCancel }) => {
   const [title, setTitle] = useState('');
@@ -10,11 +11,44 @@ const IssueForm = ({ onSubmit, onCancel }) => {
   const [location, setLocation] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [similarIssues, setSimilarIssues] = useState([]);
+  const [agentResponse, setAgentResponse] = useState('');
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+
+  useEffect(() => {
+    const initializeAgent = async () => {
+      try {
+        await aiAgent.initialize();
+      } catch (error) {
+        console.error('Error initializing AI agent:', error);
+      }
+    };
+    initializeAgent();
+  }, []);
 
   const handleVoiceInput = (data) => {
     setDescription(data.description);
     setLocation(data.location);
   };
+
+  useEffect(() => {
+    const checkSimilarIssues = async () => {
+      if (description.length < 10) return;
+      
+      setIsCheckingDuplicates(true);
+      try {
+        const similar = await aiAgent.findSimilarIssues(description, location);
+        setSimilarIssues(similar);
+      } catch (error) {
+        console.error('Error checking similar issues:', error);
+      } finally {
+        setIsCheckingDuplicates(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(checkSimilarIssues, 1000);
+    return () => clearTimeout(debounceTimer);
+  }, [description, location]);
 
   const handleVoiceError = (error) => {
     setError(error);
@@ -26,6 +60,13 @@ const IssueForm = ({ onSubmit, onCancel }) => {
     setIsSubmitting(true);
 
     try {
+      // Get AI routing recommendations
+      const routingInfo = await aiAgent.routeIssue(description, severity);
+      
+      if (!routingInfo) {
+        throw new Error('Failed to get routing information');
+      }
+
       const { data: issue, error: submitError } = await supabase
         .from('issues')
         .insert([{
@@ -34,12 +75,21 @@ const IssueForm = ({ onSubmit, onCancel }) => {
           location,
           status: 'pending',
           issue_severity: severity,
+          estimated_time: routingInfo.estimatedTime,
+          department: routingInfo.department,
+          priority: routingInfo.priority,
           created_at: new Date().toISOString()
         }])
         .select()
         .single();
 
       if (submitError) throw submitError;
+
+      // Add the new issue to the vector store for future duplicate detection
+      await aiAgent.addIssueToVectorStore(issue);
+      
+      // Set the agent's response to show to the user
+      setAgentResponse(routingInfo.userResponse);
       
       onSubmit(issue);
       resetForm();
@@ -132,6 +182,38 @@ const IssueForm = ({ onSubmit, onCancel }) => {
               onError={handleVoiceError}
             />
           </div>
+
+          {isCheckingDuplicates && (
+            <div className="alert alert-info">
+              <div className="d-flex align-items-center">
+                <div className="spinner-border spinner-border-sm me-2" role="status">
+                  <span className="visually-hidden">Checking similar issues...</span>
+                </div>
+                Checking for similar reported issues...
+              </div>
+            </div>
+          )}
+
+          {similarIssues.length > 0 && (
+            <div className="alert alert-warning mb-4">
+              <h6 className="alert-heading">Similar Issues Found</h6>
+              <p className="mb-2">We found some similar issues that have already been reported:</p>
+              <ul className="list-unstyled mb-0">
+                {similarIssues.map((issue, index) => (
+                  <li key={index} className="mb-1">
+                    • {issue.metadata.category} issue - {issue.metadata.status}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {agentResponse && (
+            <div className="alert alert-success mb-4">
+              <i className="bi bi-check-circle-fill me-2"></i>
+              {agentResponse}
+            </div>
+          )}
 
           <div className="d-flex justify-content-end gap-2">
             <button
