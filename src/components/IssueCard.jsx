@@ -1,8 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import supabase from "../helper/supabaseClient";
+import issueClassifier from "../helper/issueClassifier";
 
 function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
   const [showResolveConfirm, setShowResolveConfirm] = useState(false);
+  const [isClassifying, setIsClassifying] = useState(false);
+
+  useEffect(() => {
+    // Initialize the classifier when component mounts
+    async function initClassifier() {
+      await issueClassifier.initialize();
+    }
+    initClassifier();
+  }, []);
 
   const getSeverityBadge = (severity) => {
     if (!severity) return { emoji: "⚪️", class: "bg-secondary" };
@@ -49,6 +59,38 @@ function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
     }
   };
 
+  const classifyIssue = async (description) => {
+    setIsClassifying(true);
+    try {
+      const { category, confidence } = await issueClassifier.classifyIssue(description);
+      await handleUpdateCategory(category);
+    } catch (error) {
+      console.error('Error classifying issue:', error);
+    } finally {
+      setIsClassifying(false);
+    }
+  };
+
+  const handleUpdateCategory = async (category) => {
+    const { error } = await supabase
+      .from("issues")
+      .update({ category: category })
+      .eq("id", issue.id);
+
+    if (error) {
+      console.error("Error updating category:", error);
+    } else {
+      onUpdate();
+    }
+  };
+
+  // Add automatic classification when issue is created or description is updated
+  useEffect(() => {
+    if (issue && issue.description && (!issue.category || issue.category === 'Other Issues')) {
+      classifyIssue(issue.description);
+    }
+  }, [issue?.description]);
+
   const deptName =
     (issue.departments &&
       (issue.departments.department_name ||
@@ -92,7 +134,11 @@ function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
 
       <div className="card-body">
         <p className="card-text text-muted mb-3 line-clamp-2">{desc}</p>
-
+        {isClassifying && (
+          <div className="alert alert-info py-2 mb-3">
+            <small><i className="bi bi-gear-fill me-2"></i>Classifying issue...</small>
+          </div>
+        )}
         <div className="row g-3 mb-3">
           <div className="col-sm-6">
             <div className="d-flex align-items-center">
