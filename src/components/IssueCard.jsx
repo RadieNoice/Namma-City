@@ -225,4 +225,4 @@ function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
   );
 }
 
-export default IssueCard;asa
+export default IssueCard;
