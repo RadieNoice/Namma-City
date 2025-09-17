@@ -1,36 +1,36 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import supabase from "../helper/supabaseClient"
-import { useNavigate, Link } from "react-router-dom"
+import { useState } from "react";
+import supabase from "../helper/supabaseClient";
+import { useNavigate, Link } from "react-router-dom";
 
 function Login() {
-  const navigate = useNavigate()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [message, setMessage] = useState("")
-  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handlelogin = async (e) => {
-    e.preventDefault()
-    setMessage("")
-    setLoading(true)
+    e.preventDefault();
+    setMessage("");
+    setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email,
       password: password,
-    })
+    });
     if (error) {
-      setMessage(error.message)
-      setEmail("")
-      setPassword("")
-      setLoading(false)
-      return
+      setMessage(error.message);
+      setEmail("");
+      setPassword("");
+      setLoading(false);
+      return;
     }
     if (data) {
-      navigate("/Dashboard")
+      navigate("/Dashboard");
     }
-    setLoading(false)
-  }
+    setLoading(false);
+  };
 
   return (
     <div className="min-vh-100 bg-light d-flex align-items-center">
@@ -67,7 +67,7 @@ function Login() {
                     />
                   </div>
 
-                  <div className="mb-4">
+                  <div className="mb-2">
                     <label htmlFor="password-input" className="form-label fw-medium">
                       Password
                     </label>
@@ -80,6 +80,13 @@ function Login() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                     />
+                  </div>
+                  
+                  {/* The new "Forgot Password?" link */}
+                  <div className="text-end mb-4">
+                    <Link to="/ForgotPassword" className="text-primary text-decoration-none fw-medium">
+                      Forgot Password?
+                    </Link>
                   </div>
 
                   <button
@@ -120,7 +127,7 @@ function Login() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default Login
+export default Login;
