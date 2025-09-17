@@ -1,0 +1,77 @@
+/* Custom CSS for additional styling */
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans",
+      "Droid Sans", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  }
+  
+  /* Custom utility classes */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .min-vh-50 {
+    min-height: 50vh;
+  }
+  
+  /* Smooth transitions */
+  .btn,
+  .card,
+  .nav-link {
+    transition: all 0.2s ease-in-out;
+  }
+  
+  /* Custom hover effects */
+  .card:hover {
+    transform: translateY(-2px);
+  }
+  
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+  
+  /* Mobile optimizations */
+  @media (max-width: 768px) {
+    .container-fluid {
+      padding-left: 15px;
+      padding-right: 15px;
+    }
+  
+    .card-body {
+      padding: 1rem;
+    }
+  
+    .display-4 {
+      font-size: 2rem;
+    }
+  
+    .display-5 {
+      font-size: 1.75rem;
+    }
+  }
+  
+  /* Loading animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .card {
+    animation: fadeIn 0.3s ease-out;
+  }
+  

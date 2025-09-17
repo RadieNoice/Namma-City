@@ -1,11 +1,10 @@
-import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Home from "./pages/Home";
-import Dashboard from "./pages/Dashboard";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import { AuthProvider } from "./helper/AuthContext";
-import ProtectedRoute from "./helper/ProectedRoute";
+import { BrowserRouter, Routes, Route } from "react-router-dom"
+import Home from "./pages/Home"
+import Dashboard from "./pages/Dashboard"
+import Login from "./pages/Login"
+import Signup from "./pages/Signup"
+import { AuthProvider } from "./helper/AuthContext"
+import ProtectedRoute from "./helper/ProtectedRoute"
 
 function App() {
   return (
@@ -26,6 +25,6 @@ function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
-  );
+  )
 }
-export default App;
+export default App

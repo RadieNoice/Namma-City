@@ -1,28 +1,32 @@
+import { Link } from "react-router-dom";
 import NavBar from "../components/NavBar";
-import "../styles/Home.css";
 
 function Home() {
-    return (
-        <div className="home-container">
-            <NavBar />
-            <div className="home-content">
-                <h1>Welcome to Urban Issue Reporter</h1>
-                <p>
-                    Our app makes it easy for citizens to report local issues like potholes, broken streetlights, 
-                    or sanitation problems in just a few taps.
-                </p>
-                <ul>
-                    <li>📱 Mobile App: Report issues quickly on Android or iOS.</li>
-                    <li>🖥️ Admin Dashboard: City officials can track and resolve issues efficiently.</li>
-                    <li>⚡ Automated Reporting: Issues are automatically sent to the right department.</li>
-                    <li>🔔 Feedback Loop: Stay updated on your reported issues from dispatch to resolution.</li>
-                </ul>
-                <p>
-                    Join us in making our city cleaner, safer, and more connected!
-                </p>
+  return (
+    <>
+      <NavBar />
+      <div className="min-vh-100 bg-light d-flex align-items-center justify-content-center text-center">
+        <div className="container">
+          <div className="row justify-content-center">
+            <div className="col-md-8">
+              <h1 className="display-4 fw-bold text-primary mb-3">Welcome to NammaCity</h1>
+              <p className="lead text-muted mb-4">
+                Your platform for reporting and managing community issues.
+              </p>
+              <div className="d-flex justify-content-center gap-3">
+                <Link to="/Login" className="btn btn-primary btn-lg">
+                  Get Started
+                </Link>
+                <Link to="/Signup" className="btn btn-outline-secondary btn-lg">
+                  Learn More
+                </Link>
+              </div>
             </div>
+          </div>
         </div>
-    );
+      </div>
+    </>
+  );
 }
 
 export default Home;
