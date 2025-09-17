@@ -1,0 +1,70 @@
+
+/* IssueCard.css */
+
+.issue-card {
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.issue-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.issue-header h3 {
+    font-size: 1.2rem;
+    color: #1e3a8a;
+    margin: 0;
+}
+
+.issue-info p {
+    margin: 6px 0;
+    font-size: 0.95rem;
+    color: #333333;
+}
+
+.issue-info strong {
+    color: #1e3a8a;
+}
+
+.issue-media {
+    margin-top: 10px;
+}
+
+.issue-media img,
+.issue-media video {
+    max-width: 100%;
+    border-radius: 8px;
+    display: block;
+}
+
+/* Severity Emoji Colors for extra clarity */
+#issue-severity-low {
+    color: #28a745; /* green */
+}
+
+#issue-severity-medium {
+    color: #ffc107; /* yellow */
+}
+
+#issue-severity-high {
+    color: #dc3545; /* red */
+}
+
+/* Responsive tweak */
+@media (max-width: 600px) {
+    .issue-card {
+        padding: 15px;
+    }
+
+    .issue-header h3 {
+        font-size: 1rem;
+    }
+
+    .issue-info p {
+        font-size: 0.9rem;
+    }
+}

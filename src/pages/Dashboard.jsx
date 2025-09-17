@@ -1,8 +1,10 @@
+// src/pages/Dashboard.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import supabase from "../helper/supabaseClient";
 import IssueCard from "../components/IssueCard";
 import { useAuth } from "../helper/AuthContext";
+import '../styles/Dashboard.css';
 
 function Dashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -26,7 +28,6 @@ function Dashboard() {
       setLoading(true);
       setError(null);
 
-      // 1) fetch profile (grab department_id)
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("id, username, department_id")
@@ -40,14 +41,14 @@ function Dashboard() {
       }
       setUserProfile(profileData);
 
-      // 2) ensure department_id exists
       if (!profileData.department_id) {
-        setError("No department assigned to this profile. Please update your profile.");
+        setError(
+          "No department assigned to this profile. Please update your profile."
+        );
         setLoading(false);
         return;
       }
 
-      // 3) fetch department row to get department_name (city)
       const { data: deptData, error: deptError } = await supabase
         .from("departments")
         .select("id, department_name")
@@ -61,18 +62,38 @@ function Dashboard() {
       }
       setDepartment(deptData);
 
-      // 4) fetch issues matching department_id (recommended)
       const { data: issuesData, error: issuesError } = await supabase
         .from("issues")
-        .select("*")
-        .eq("department_id", profileData.department_id)   // reliable UUID match
+        .select(
+          "id, title, description, issue_type, created_at, latitude, longitude, status, department_id, user_id, image_url, departments(id,department_name)"
+        )
+        .eq("department_id", profileData.department_id)
         .order("created_at", { ascending: false });
 
       if (issuesError) {
         setError(issuesError.message);
         setIssues([]);
       } else {
-        setIssues(issuesData || []);
+        const normalized = (issuesData || []).map((i) => {
+          let deptName = null;
+          if (i.departments) {
+            if (Array.isArray(i.departments)) {
+              deptName = i.departments[0]?.department_name ?? null;
+            } else if (typeof i.departments === "object") {
+              deptName = i.departments.department_name ?? null;
+            }
+          }
+          deptName = deptName || i.issue_department || i.department_name || null;
+          const city = i.issue_city || deptName || null;
+
+          return {
+            ...i,
+            department_name: deptName,
+            issue_city: city,
+          };
+        });
+
+        setIssues(normalized);
       }
 
       setLoading(false);
@@ -86,26 +107,30 @@ function Dashboard() {
     navigate("/Login");
   };
 
-  if (authLoading || loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (authLoading || loading) return <div id="dashboard-loading">Loading...</div>;
+  if (error) return <div id="dashboard-error" style={{ color: "red" }}>Error: {error}</div>;
 
   return (
-    <div className="dashboard-container">
-      <h2>
+    <div id="dashboard-container" className="dashboard-container">
+      <h2 id="dashboard-welcome">
         Welcome, {userProfile?.username ?? user?.email} —
-        <small style={{ marginLeft: 8 }}>{department?.department_name}</small>
+        <small id="dashboard-department" style={{ marginLeft: 8 }}>
+          {department?.department_name}
+        </small>
       </h2>
 
-      <button onClick={handleLogout} style={{ marginBottom: "20px" }}>
+      <button id="logout-button" onClick={handleLogout} style={{ marginBottom: "20px" }}>
         Logout
       </button>
 
       {issues.length === 0 ? (
-        <div>No issues for your department ({department.department_name}).</div>
+        <div id="no-issues-message">
+          No issues for your department ({department.department_name}).
+        </div>
       ) : (
-        <div className="issues-grid">
-          {issues.map((issue) => (
-            <IssueCard key={issue.id} issue={issue} />
+        <div id="issues-grid" className="issues-grid">
+          {issues.map((issue, index) => (
+            <IssueCard key={issue.id} issue={issue} index={index} />
           ))}
         </div>
       )}
