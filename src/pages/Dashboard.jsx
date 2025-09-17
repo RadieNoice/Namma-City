@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import supabase from "../helper/supabaseClient";
 import IssueCard from "../components/IssueCard";
+import IssueForm from "../components/IssueForm";
 import { useAuth } from "../helper/AuthContext";
 
 function Dashboard() {
@@ -17,6 +18,7 @@ function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState("all");
   const [sortOrder, setSortOrder] = useState("newest");
+  const [showNewIssueForm, setShowNewIssueForm] = useState(false);
 
   const fetchAll = async () => {
     if (authLoading) return;
@@ -293,6 +295,15 @@ function Dashboard() {
                   </button>
                 </div>
                 
+                {/* New Issue Button */}
+                <button
+                  className="btn btn-success"
+                  onClick={() => setShowNewIssueForm(true)}
+                >
+                  <i className="bi bi-plus-lg me-2"></i>
+                  New Issue
+                </button>
+
                 {/* Sorting Dropdown */}
                 <div className="btn-group">
                   <button
@@ -324,7 +335,19 @@ function Dashboard() {
               </div>
             </div>
 
-            {issues.length === 0 ? (
+            {showNewIssueForm && (
+              <div className="mb-4">
+                <IssueForm
+                  onSubmit={(issue) => {
+                    setShowNewIssueForm(false);
+                    fetchAll();
+                  }}
+                  onCancel={() => setShowNewIssueForm(false)}
+                />
+              </div>
+            )}
+
+            {issues.length === 0 && !showNewIssueForm ? (
               <div className="text-center py-5">
                 <div
                   className="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
@@ -336,6 +359,13 @@ function Dashboard() {
                 <p className="text-muted">
                   No issues have been reported for your department ({department?.department_name}) yet.
                 </p>
+                <button
+                  className="btn btn-primary mt-3"
+                  onClick={() => setShowNewIssueForm(true)}
+                >
+                  <i className="bi bi-plus-lg me-2"></i>
+                  Report an Issue
+                </button>
               </div>
             ) : (
               <div className="row g-4">
