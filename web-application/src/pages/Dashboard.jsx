@@ -21,6 +21,9 @@ function Dashboard() {
   const [sortOrder, setSortOrder] = useState('newest');
   const [showNewIssueForm, setShowNewIssueForm] = useState(false);
   const [activeTab, setActiveTab] = useState('issues');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
 
   const fetchAll = async () => {
     if (authLoading) return;
@@ -36,12 +39,13 @@ function Dashboard() {
     try {
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, username, department_id')
+        .select('id, username, department_id, role')
         .eq('id', user.id)
         .single();
 
       if (profileError) throw profileError;
       setUserProfile(profileData);
+      setIsAdmin(profileData.role === 'city_head');
 
       if (!profileData.department_id) {
         throw new Error('No department assigned to this profile.');
@@ -109,6 +113,11 @@ function Dashboard() {
     navigate('/Login');
   };
 
+  const handleSortChange = (newSort) => {
+    setSortOrder(newSort);
+    setShowSortDropdown(false);
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
@@ -159,32 +168,48 @@ function Dashboard() {
           </span>
 
           <div className="navbar-nav ms-auto">
-            <div className="nav-item dropdown">
-              <a
-                className="nav-link dropdown-toggle text-white d-flex align-items-center"
-                href="#"
-                role="button"
-                data-bs-toggle="dropdown"
+            <div className="nav-item dropdown position-relative">
+              <button
+                className="nav-link dropdown-toggle text-white d-flex align-items-center btn btn-link text-decoration-none"
+                onClick={() => setShowUserDropdown(!showUserDropdown)}
+                style={{ border: 'none' }}
               >
                 <i className="bi bi-person-circle me-2" />
                 <span className="d-none d-md-inline">{userProfile?.username ?? user?.email}</span>
-              </a>
-              <ul className="dropdown-menu dropdown-menu-end">
-                <li>
-                  <span className="dropdown-item-text">
-                    <small className="text-muted">Department:</small>
-                    <br />
-                    <strong>{department?.department_name}</strong>
-                  </span>
-                </li>
-                <li><hr className="dropdown-divider" /></li>
-                <li>
-                  <button className="dropdown-item text-danger" onClick={handleLogout}>
-                    <i className="bi bi-box-arrow-right me-2" />
-                    Logout
-                  </button>
-                </li>
-              </ul>
+              </button>
+              {showUserDropdown && (
+                <ul className="dropdown-menu dropdown-menu-end show position-absolute" style={{ top: '100%', right: 0 }}>
+                  <li>
+                    <span className="dropdown-item-text">
+                      <small className="text-muted">Department:</small>
+                      <br />
+                      <strong>{department?.department_name}</strong>
+                    </span>
+                  </li>
+                  <li>
+                    <span className="dropdown-item-text">
+                      <small className="text-muted">Role:</small>
+                      <br />
+                      <strong className={isAdmin ? "text-success" : "text-primary"}>
+                        {isAdmin ? "Administrator" : "Staff Member"}
+                      </strong>
+                    </span>
+                  </li>
+                  <li><hr className="dropdown-divider" /></li>
+                  <li>
+                    <button 
+                      className="dropdown-item text-danger" 
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        handleLogout();
+                      }}
+                    >
+                      <i className="bi bi-box-arrow-right me-2" />
+                      Logout
+                    </button>
+                  </li>
+                </ul>
+              )}
             </div>
           </div>
         </div>
@@ -256,6 +281,9 @@ function Dashboard() {
                     <h2 className="fw-bold text-dark mb-1">Welcome back, {userProfile?.username ?? 'User'}!</h2>
                     <p className="text-muted mb-0">
                       Managing issues for <strong>{department?.department_name}</strong>
+                      <span className={`badge ms-2 ${isAdmin ? 'bg-success' : 'bg-primary'}`}>
+                        {isAdmin ? 'Admin' : 'Staff'}
+                      </span>
                     </p>
                   </div>
                   <div className="d-flex gap-2 flex-wrap">
@@ -291,32 +319,42 @@ function Dashboard() {
                       New Issue
                     </button>
 
-                    <div className="btn-group">
+                    <div className="btn-group position-relative">
                       <button
                         type="button"
                         className="btn btn-outline-secondary dropdown-toggle"
-                        data-bs-toggle="dropdown"
-                        aria-expanded="false"
+                        onClick={() => setShowSortDropdown(!showSortDropdown)}
                       >
                         Sort
                       </button>
-                      <ul className="dropdown-menu">
-                        <li>
-                          <button className="dropdown-item" onClick={() => setSortOrder('newest')}>
-                            Newest First
-                          </button>
-                        </li>
-                        <li>
-                          <button className="dropdown-item" onClick={() => setSortOrder('oldest')}>
-                            Oldest First
-                          </button>
-                        </li>
-                        <li>
-                          <button className="dropdown-item" onClick={() => setSortOrder('alphabetical')}>
-                            A-Z
-                          </button>
-                        </li>
-                      </ul>
+                      {showSortDropdown && (
+                        <ul className="dropdown-menu show position-absolute" style={{ top: '100%', left: 0 }}>
+                          <li>
+                            <button 
+                              className="dropdown-item" 
+                              onClick={() => handleSortChange('newest')}
+                            >
+                              Newest First
+                            </button>
+                          </li>
+                          <li>
+                            <button 
+                              className="dropdown-item" 
+                              onClick={() => handleSortChange('oldest')}
+                            >
+                              Oldest First
+                            </button>
+                          </li>
+                          <li>
+                            <button 
+                              className="dropdown-item" 
+                              onClick={() => handleSortChange('alphabetical')}
+                            >
+                              A-Z
+                            </button>
+                          </li>
+                        </ul>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -324,6 +362,8 @@ function Dashboard() {
                 {showNewIssueForm && (
                   <div className="mb-4">
                     <IssueForm
+                      departmentId={department?.id}
+                      userId={user?.id}
                       onSubmit={(issue) => {
                         setShowNewIssueForm(false);
                         fetchAll();
@@ -355,12 +395,14 @@ function Dashboard() {
                   </div>
                 ) : (
                   <div className="row g-4">
-                    {issues.map((issue) => (
+                    {issues.map((issue, index) => (
                       <div key={issue.id} className="col-12 col-xl-6">
                         <IssueCard 
                           issue={issue} 
+                          index={index}
                           onUpdate={fetchAll} 
-                          departmentUsers={departmentUsers} 
+                          departmentUsers={departmentUsers}
+                          isAdmin={isAdmin}
                         />
                       </div>
                     ))}
@@ -388,7 +430,6 @@ function Dashboard() {
                         onSubmit={(response) => {
                           if (response.action === 'show_issue' && response.issueId) {
                             setActiveTab('issues');
-                            // Could add logic here to highlight the specific issue
                           }
                         }}
                       />

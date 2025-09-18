@@ -5,6 +5,7 @@ function NavBar() {
     <nav className="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
       <div className="container">
         <Link className="navbar-brand fw-bold fs-3" to="/">
+          <i className="bi bi-building me-2"></i>
           NammaCity
         </Link>
 
@@ -24,16 +25,19 @@ function NavBar() {
           <ul className="navbar-nav ms-auto">
             <li className="nav-item">
               <Link to="/" className="nav-link text-white fw-medium">
+                <i className="bi bi-house me-1"></i>
                 Home
               </Link>
             </li>
             <li className="nav-item">
               <Link to="/Login" className="nav-link text-white fw-medium">
+                <i className="bi bi-box-arrow-in-right me-1"></i>
                 Login
               </Link>
             </li>
             <li className="nav-item">
               <Link to="/Signup" className="btn btn-outline-light ms-2">
+                <i className="bi bi-person-plus me-1"></i>
                 Sign Up
               </Link>
             </li>

@@ -1,162 +1,242 @@
-import React, { useState } from 'react';
-import VoiceInput from './VoiceInput';
-import ChatWidget from './ChatWidget';
+import { useState } from 'react';
 import supabase from '../helper/supabaseClient';
-import { ISSUE_CATEGORIES } from '../helper/issueClassifier';
 
-const IssueForm = ({ onSubmit, onCancel }) => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [severity, setSeverity] = useState('medium');
-  const [location, setLocation] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [chatMode, setChatMode] = useState(false);
+function IssueForm({ departmentId, userId, onSubmit, onCancel }) {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    issueType: '',
+    latitude: null,
+    longitude: null
+  });
+  const [loading, setLoading] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [message, setMessage] = useState('');
 
-  const handleVoiceInput = (data) => {
-    setDescription(data.description);
-    setLocation(data.location);
+  const issueTypes = [
+    'Roads and Infrastructure',
+    'Sanitation and Cleanliness', 
+    'Electricity and Power',
+    'Water Supply',
+    'Traffic and Transportation',
+    'Public Safety',
+    'Other Issues'
+  ];
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
-  const handleVoiceError = (error) => {
-    setError(error);
+  const getCurrentLocation = () => {
+    setLocationLoading(true);
+    setLocationError('');
+
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by this browser.');
+      setLocationLoading(false);
+      return;
+    }
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 60000
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setFormData(prev => ({
+          ...prev,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        }));
+        setLocationLoading(false);
+        setMessage('Location captured successfully!');
+        setTimeout(() => setMessage(''), 3000);
+      },
+      (error) => {
+        setLocationLoading(false);
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('Location access denied by user. Please enable location access in your browser settings.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('Location information is unavailable.');
+            break;
+          case error.TIMEOUT:
+            setLocationError('Location request timed out. Please try again.');
+            break;
+          default:
+            setLocationError('An unknown error occurred while retrieving location.');
+            break;
+        }
+      },
+      options
+    );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setIsSubmitting(true);
+    setLoading(true);
+    setMessage('');
 
     try {
-      const { data: issue, error: submitError } = await supabase
+      const issueData = {
+        title: formData.title,
+        description: formData.description,
+        issue_type: formData.issueType,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        department_id: departmentId,
+        user_id: userId,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
         .from('issues')
-        .insert([{
-          title,
-          description,
-          location,
-          status: 'pending',
-          issue_severity: severity,
-          created_at: new Date().toISOString()
-        }])
+        .insert([issueData])
         .select()
         .single();
 
-      if (submitError) throw submitError;
-      
-      onSubmit(issue);
-      resetForm();
-    } catch (err) {
-      setError('Failed to submit issue. Please try again.');
-      console.error('Error submitting issue:', err);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      if (error) throw error;
 
-  const resetForm = () => {
-    setTitle('');
-    setDescription('');
-    setSeverity('medium');
-    setLocation('');
-    setError('');
+      setMessage('Issue reported successfully!');
+      onSubmit(data);
+    } catch (error) {
+      setMessage('Error submitting issue: ' + error.message);
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="card border-0 shadow-sm">
+      <div className="card-header bg-primary text-white">
+        <h5 className="card-title mb-0">
+          <i className="bi bi-plus-circle me-2"></i>
+          Report New Issue
+        </h5>
+      </div>
+      
       <div className="card-body">
-        <h5 className="card-title mb-4">Report New Issue</h5>
-        
-        {error && (
-          <div className="alert alert-danger" role="alert">
-            <i className="bi bi-exclamation-triangle me-2"></i>
-            {error}
+        {message && (
+          <div className={`alert ${message.includes('successfully') ? 'alert-success' : 'alert-danger'}`} role="alert">
+            {message}
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="mb-3">
-            <label htmlFor="title" className="form-label">Issue Title</label>
-            <input
-              type="text"
-              className="form-control"
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              placeholder="Brief title describing the issue"
-            />
+          <div className="row">
+            <div className="col-md-6 mb-3">
+              <label htmlFor="title" className="form-label fw-medium">
+                Issue Title *
+              </label>
+              <input
+                type="text"
+                className="form-control"
+                id="title"
+                name="title"
+                value={formData.title}
+                onChange={handleInputChange}
+                placeholder="Brief description of the issue"
+                required
+              />
+            </div>
+
+            <div className="col-md-6 mb-3">
+              <label htmlFor="issueType" className="form-label fw-medium">
+                Issue Type *
+              </label>
+              <select
+                className="form-select"
+                id="issueType"
+                name="issueType"
+                value={formData.issueType}
+                onChange={handleInputChange}
+                required
+              >
+                <option value="">Select issue type</option>
+                {issueTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="mb-3">
-            <label htmlFor="description" className="form-label">Description</label>
+            <label htmlFor="description" className="form-label fw-medium">
+              Description *
+            </label>
             <textarea
               className="form-control"
               id="description"
-              rows="3"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              name="description"
+              rows="4"
+              value={formData.description}
+              onChange={handleInputChange}
+              placeholder="Detailed description of the issue..."
               required
-              placeholder="Detailed description of the issue"
-            />
+            ></textarea>
           </div>
 
           <div className="mb-3">
-            <label htmlFor="severity" className="form-label">Severity</label>
-            <select
-              className="form-select"
-              id="severity"
-              value={severity}
-              onChange={(e) => setSeverity(e.target.value)}
-              required
-            >
-              <option value="low">Low Priority</option>
-              <option value="medium">Medium Priority</option>
-              <option value="high">High Priority</option>
-            </select>
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="location" className="form-label">Location</label>
-            <input
-              type="text"
-              className="form-control"
-              id="location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              required
-              placeholder="Address or location description"
-            />
-          </div>
-
-          <div className="mb-4">
-            <VoiceInput
-              onTranscriptComplete={handleVoiceInput}
-              onError={handleVoiceError}
-            />
-          </div>
-
-          <div className="mb-4">
-            <button
-              type="button"
-              className="btn btn-outline-primary w-100"
-              onClick={() => setChatMode(!chatMode)}
-            >
-              <i className={`bi bi-chat${chatMode ? '-fill' : ''} me-2`}></i>
-              {chatMode ? 'Hide Chat Assistant' : 'Use Chat Assistant'}
-            </button>
-
-            {chatMode && (
-              <div className="mt-3">
-                <ChatWidget
-                  onSubmit={async (response) => {
-                    if (response.action === 'confirm_new') {
-                      setDescription(response.description || '');
-                      setSeverity(response.routingInfo.priority || 'medium');
-                      await handleSubmit(new Event('submit'));
-                    }
-                  }}
-                />
+            <label className="form-label fw-medium">Location</label>
+            <div className="d-flex align-items-center gap-3">
+              <button
+                type="button"
+                className="btn btn-outline-primary"
+                onClick={getCurrentLocation}
+                disabled={locationLoading}
+              >
+                {locationLoading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                    Getting Location...
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-geo-alt me-2"></i>
+                    Get Current Location
+                  </>
+                )}
+              </button>
+              
+              {formData.latitude && formData.longitude && (
+                <span className="text-success">
+                  <i className="bi bi-check-circle me-1"></i>
+                  Location captured
+                </span>
+              )}
+            </div>
+            
+            {locationError && (
+              <div className="alert alert-warning mt-2" role="alert">
+                <i className="bi bi-exclamation-triangle me-2"></i>
+                {locationError}
+                <hr />
+                <small>
+                  <strong>How to enable location access:</strong><br />
+                  • Click the location icon in your browser's address bar<br />
+                  • Select "Allow" for location permissions<br />
+                  • Make sure you're using HTTPS (not HTTP)<br />
+                  • Check your browser's privacy/security settings
+                </small>
               </div>
+            )}
+            
+            {formData.latitude && formData.longitude && (
+              <small className="text-muted">
+                Coordinates: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+              </small>
             )}
           </div>
 
@@ -165,22 +245,24 @@ const IssueForm = ({ onSubmit, onCancel }) => {
               type="button"
               className="btn btn-outline-secondary"
               onClick={onCancel}
-              disabled={isSubmitting}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={isSubmitting}
+              disabled={loading}
             >
-              {isSubmitting ? (
+              {loading ? (
                 <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  <span className="spinner-border spinner-border-sm me-2" role="status"></span>
                   Submitting...
                 </>
               ) : (
-                'Submit Issue'
+                <>
+                  <i className="bi bi-send me-2"></i>
+                  Submit Issue
+                </>
               )}
             </button>
           </div>
@@ -188,6 +270,6 @@ const IssueForm = ({ onSubmit, onCancel }) => {
       </div>
     </div>
   );
-};
+}
 
 export default IssueForm;

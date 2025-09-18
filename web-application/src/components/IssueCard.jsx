@@ -1,18 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import supabase from "../helper/supabaseClient";
-import issueClassifier from "../helper/issueClassifier";
+import { useAuth } from "../helper/AuthContext";
 
-function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
+function IssueCard({ issue, index = 0, onUpdate, departmentUsers, isAdmin }) {
+  const { user } = useAuth();
   const [showResolveConfirm, setShowResolveConfirm] = useState(false);
-  const [isClassifying, setIsClassifying] = useState(false);
-
-  useEffect(() => {
-    // Initialize the classifier when component mounts
-    async function initClassifier() {
-      await issueClassifier.initialize();
-    }
-    initClassifier();
-  }, []);
+  const [message, setMessage] = useState("");
 
   const getSeverityBadge = (severity) => {
     if (!severity) return { emoji: "⚪️", class: "bg-secondary" };
@@ -26,70 +19,77 @@ function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
   const getStatusBadge = (status) => {
     if (!status) return "bg-secondary";
     const s = String(status).toLowerCase();
-    if (s.includes("resolved") || s.includes("completed")) return "bg-success";
+    if (s.includes("resolved") || s.includes("completed") || s.includes("done")) return "bg-success";
     if (s.includes("progress") || s.includes("working")) return "bg-warning";
     if (s.includes("pending") || s.includes("new")) return "bg-primary";
     return "bg-secondary";
   };
 
   const handleUpdateStatus = async (newStatus) => {
-    const { error } = await supabase
-      .from("issues")
-      .update({ status: newStatus })
-      .eq("id", issue.id);
+    setMessage("");
 
-    if (error) {
-      console.error("Error updating status:", error);
-    } else {
-      onUpdate();
-      setShowResolveConfirm(false);
+    // Check permissions: ONLY Admin OR assigned user can change status
+    const isAssignedUser = user?.id === issue.user_id;
+    
+    console.log("Permission check:", { 
+      isAdmin, 
+      isAssignedUser, 
+      userId: user?.id, 
+      issueUserId: issue.user_id 
+    });
+    
+    if (!isAdmin && !isAssignedUser) {
+        setMessage("Only the department administrator or the assigned user can change the status of this task.");
+        return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("issues")
+        .update({ status: newStatus })
+        .eq("id", issue.id);
+
+      if (error) {
+        setMessage("Failed to update status: " + error.message);
+        console.error("Error updating status:", error);
+      } else {
+        setMessage("Status updated successfully!");
+        onUpdate();
+        setShowResolveConfirm(false);
+      }
+    } catch (err) {
+      setMessage("An unexpected error occurred.");
+      console.error("Unexpected error:", err);
     }
   };
 
   const handleAssignUser = async (userId) => {
-    const { error } = await supabase
-      .from("issues")
-      .update({ user_id: userId })
-      .eq("id", issue.id);
+    setMessage("");
 
-    if (error) {
-      console.error("Error assigning user:", error);
-    } else {
-      onUpdate();
+    // Only admin can assign tasks
+    if (!isAdmin) {
+      setMessage("Only department administrators can assign tasks.");
+      return;
     }
-  };
 
-  const classifyIssue = async (description) => {
-    setIsClassifying(true);
     try {
-      const { category, confidence } = await issueClassifier.classifyIssue(description);
-      await handleUpdateCategory(category);
-    } catch (error) {
-      console.error('Error classifying issue:', error);
-    } finally {
-      setIsClassifying(false);
+      const { error } = await supabase
+        .from("issues")
+        .update({ user_id: userId })
+        .eq("id", issue.id);
+
+      if (error) {
+        setMessage("Failed to assign task: " + error.message);
+        console.error("Error assigning user:", error);
+      } else {
+        setMessage("Task assigned successfully!");
+        onUpdate();
+      }
+    } catch (err) {
+      setMessage("An unexpected error occurred.");
+      console.error("Unexpected error:", err);
     }
   };
-
-  const handleUpdateCategory = async (category) => {
-    const { error } = await supabase
-      .from("issues")
-      .update({ category: category })
-      .eq("id", issue.id);
-
-    if (error) {
-      console.error("Error updating category:", error);
-    } else {
-      onUpdate();
-    }
-  };
-
-  // Add automatic classification when issue is created or description is updated
-  useEffect(() => {
-    if (issue && issue.description && (!issue.category || issue.category === 'Other Issues')) {
-      classifyIssue(issue.description);
-    }
-  }, [issue?.description]);
 
   const deptName =
     (issue.departments &&
@@ -115,6 +115,11 @@ function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
 
   const severityBadge = getSeverityBadge(severity);
 
+  // Permission checks - Be very explicit about permissions
+  const isAssignedUser = user?.id === issue.user_id;
+  const canChangeStatus = isAdmin || (isAssignedUser && issue.user_id !== null);
+  const canAssignTasks = isAdmin; // Only admins can assign tasks
+
   return (
     <div className="card border-0 shadow-sm h-100">
       <div className="card-header bg-white border-bottom-0 pb-0">
@@ -134,11 +139,7 @@ function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
 
       <div className="card-body">
         <p className="card-text text-muted mb-3 line-clamp-2">{desc}</p>
-        {isClassifying && (
-          <div className="alert alert-info py-2 mb-3">
-            <small><i className="bi bi-gear-fill me-2"></i>Classifying issue...</small>
-          </div>
-        )}
+
         <div className="row g-3 mb-3">
           <div className="col-sm-6">
             <div className="d-flex align-items-center">
@@ -218,54 +219,103 @@ function IssueCard({ issue, index = 0, onUpdate, departmentUsers }) {
         <div className="d-flex justify-content-between align-items-center">
           <small className="text-muted">Issue ID: {issue.id}</small>
           <div className="btn-group btn-group-sm">
-            {status === "pending" && (
-              <button className="btn btn-outline-warning" onClick={() => handleUpdateStatus("in_progress")}>
-                <i className="bi bi-arrow-right-circle me-1"></i> Progress
-              </button>
-            )}
-            {status === "in_progress" && (
-              <button className="btn btn-outline-success" onClick={() => setShowResolveConfirm(true)}>
-                <i className="bi bi-check-lg me-1"></i> Resolve
-              </button>
+            {/* Status Change Buttons - Available to Admin OR Assigned User */}
+            {canChangeStatus && (
+              <>
+                {status === "pending" && (
+                  <button 
+                    className="btn btn-outline-warning" 
+                    onClick={() => handleUpdateStatus("in_progress")}
+                  >
+                    <i className="bi bi-arrow-right-circle me-1"></i> Start Progress
+                  </button>
+                )}
+                {status === "in_progress" && (
+                  <button 
+                    className="btn btn-outline-success" 
+                    onClick={() => setShowResolveConfirm(true)}
+                  >
+                    <i className="bi bi-check-lg me-1"></i> Mark Done
+                  </button>
+                )}
+                {status === "resolved" && (
+                  <button 
+                    className="btn btn-outline-primary" 
+                    onClick={() => handleUpdateStatus("pending")}
+                  >
+                    <i className="bi bi-arrow-counterclockwise me-1"></i> Reopen
+                  </button>
+                )}
+              </>
             )}
 
+            {/* Confirmation Dialog */}
             {showResolveConfirm && (
                 <div className="position-absolute top-50 start-50 translate-middle alert alert-info py-2 px-3 m-0" style={{ zIndex: 10 }}>
-                    <small className="d-block mb-1">Confirm?</small>
-                    <button className="btn btn-sm btn-success me-1" onClick={() => handleUpdateStatus("resolved")}>Yes</button>
-                    <button className="btn btn-sm btn-danger" onClick={() => setShowResolveConfirm(false)}>No</button>
+                    <small className="d-block mb-1">Mark as completed?</small>
+                    <button 
+                      className="btn btn-sm btn-success me-1" 
+                      onClick={() => handleUpdateStatus("resolved")}
+                    >
+                      Yes
+                    </button>
+                    <button 
+                      className="btn btn-sm btn-danger" 
+                      onClick={() => setShowResolveConfirm(false)}
+                    >
+                      No
+                    </button>
                 </div>
             )}
             
-            <div className="btn-group">
-                <button 
-                    type="button" 
-                    className="btn btn-outline-secondary dropdown-toggle" 
-                    data-bs-toggle="dropdown" 
-                    aria-expanded="false"
-                >
-                    <i className="bi bi-person-plus me-1"></i> Assign
-                </button>
-                <ul className="dropdown-menu">
-                    {departmentUsers && departmentUsers.length > 0 ? (
-                        departmentUsers.map((user) => (
-                            <li key={user.id}>
-                                <a 
-                                    className="dropdown-item" 
-                                    href="#" 
-                                    onClick={() => handleAssignUser(user.id)}
-                                >
-                                    {user.username}
-                                </a>
-                            </li>
-                        ))
-                    ) : (
-                        <li><span className="dropdown-item-text">No users available</span></li>
-                    )}
-                </ul>
-            </div>
+            {/* Assignment Dropdown - ONLY for Admin */}
+            {canAssignTasks && (
+                <div className="btn-group">
+                    <button 
+                        type="button" 
+                        className="btn btn-outline-secondary dropdown-toggle" 
+                        data-bs-toggle="dropdown" 
+                        aria-expanded="false"
+                    >
+                        <i className="bi bi-person-plus me-1"></i> Assign
+                    </button>
+                    <ul className="dropdown-menu">
+                        {departmentUsers && departmentUsers.length > 0 ? (
+                            departmentUsers.map((departmentUser) => (
+                                <li key={departmentUser.id}>
+                                    <a 
+                                        className="dropdown-item" 
+                                        href="#" 
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            handleAssignUser(departmentUser.id);
+                                        }}
+                                    >
+                                        {departmentUser.username}
+                                        {departmentUser.id === issue.user_id && <span className="badge bg-primary ms-2">Current</span>}
+                                    </a>
+                                </li>
+                            ))
+                        ) : (
+                            <li><span className="dropdown-item-text">No users available</span></li>
+                        )}
+                    </ul>
+                </div>
+            )}
+
+            {/* Show permission info if user can't change status */}
+            {!canChangeStatus && (
+              <small className="text-muted">
+                {!issue.user_id ? "Task not assigned yet" : "Only admin or assigned user can modify"}
+              </small>
+            )}
           </div>
         </div>
+        {message && (
+          <div className={`alert ${message.includes("successfully") ? "alert-success" : "alert-warning"} mt-3 text-center`} role="alert">
+            {message}
+          </div>
+        )}
       </div>
     </div>
   );

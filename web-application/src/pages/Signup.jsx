@@ -9,6 +9,7 @@ function Signup() {
   const [name, setName] = useState("")
   const [password, setPassword] = useState("")
   const [city, setCity] = useState("")
+  const [userType, setUserType] = useState("regular") // New state for user type
   const [message, setMessage] = useState("")
   const [loading, setLoading] = useState(false)
   const [departments, setDepartments] = useState([])
@@ -29,6 +30,32 @@ function Signup() {
     setMessage("")
     setLoading(true)
 
+    // If user wants to be admin, check if department already has one
+    if (userType === "admin") {
+      console.log("Checking for existing admin in department:", city)
+      
+      const { data: existingAdmins, error: checkError } = await supabase
+        .from("profiles")
+        .select("id, username, department_id, role")
+        .eq("department_id", city)
+        .eq("role", "city_head")
+
+      console.log("Existing admins query result:", { existingAdmins, checkError })
+
+      if (checkError) {
+        setMessage("Error checking existing administrators. Please try again.")
+        setLoading(false)
+        return
+      }
+
+      if (existingAdmins && existingAdmins.length > 0) {
+        const departmentName = departments.find(d => d.id.toString() === city.toString())?.department_name || "this department"
+        setMessage(`An administrator (${existingAdmins[0].username}) already exists for ${departmentName}. Only one admin per department is allowed.`)
+        setLoading(false)
+        return
+      }
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -43,13 +70,16 @@ function Signup() {
     if (data.user) {
       const userId = data.user.id
 
+      // Set role based on user selection
+      const role = userType === "admin" ? "city_head" : "regular_user"
+
       const { error: profileError } = await supabase.from("profiles").insert([
         {
           id: userId,
           username: name,
-          is_official: false,
-          department_id: city,
-          role: "city_head",
+          is_official: userType === "admin", // true if admin, false if regular
+          department_id: city, // Keep as string since that's what the select returns
+          role: role,
         },
       ])
 
@@ -57,7 +87,8 @@ function Signup() {
         setMessage("Account created, but could not save profile data.")
         console.error("Profile insertion error:", profileError)
       } else {
-        setMessage("User account created successfully!")
+        const accountType = userType === "admin" ? "administrator" : "regular user"
+        setMessage(`${accountType} account created successfully!`)
         navigate("/Login")
       }
     }
@@ -74,7 +105,7 @@ function Signup() {
               <div className="card-body p-5">
                 <div className="text-center mb-4">
                   <h2 className="fw-bold text-primary mb-2">Join NammaCity</h2>
-                  <p className="text-muted">Create your account to start reporting issues</p>
+                  <p className="text-muted">Create your account to start managing issues</p>
                 </div>
 
                 {message && (
@@ -137,6 +168,47 @@ function Signup() {
                     />
                   </div>
 
+                  {/* Account Type Selection */}
+                  <div className="mb-3">
+                    <label className="form-label fw-medium">Account Type</label>
+                    <div className="row">
+                      <div className="col-6">
+                        <div className="form-check form-check-lg p-3 border rounded">
+                          <input
+                            className="form-check-input"
+                            type="radio"
+                            name="userType"
+                            id="regular-user"
+                            value="regular"
+                            checked={userType === "regular"}
+                            onChange={(e) => setUserType(e.target.value)}
+                          />
+                          <label className="form-check-label w-100" htmlFor="regular-user">
+                            <strong className="text-primary">Staff Member</strong>
+                            <small className="d-block text-muted">Can work on assigned tasks</small>
+                          </label>
+                        </div>
+                      </div>
+                      <div className="col-6">
+                        <div className="form-check form-check-lg p-3 border rounded">
+                          <input
+                            className="form-check-input"
+                            type="radio"
+                            name="userType"
+                            id="admin-user"
+                            value="admin"
+                            checked={userType === "admin"}
+                            onChange={(e) => setUserType(e.target.value)}
+                          />
+                          <label className="form-check-label w-100" htmlFor="admin-user">
+                            <strong className="text-success">Administrator</strong>
+                            <small className="d-block text-muted">Can assign tasks and manage department</small>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="mb-4">
                     <label htmlFor="city-select" className="form-label fw-medium">
                       Department/City
@@ -169,7 +241,7 @@ function Signup() {
                         Creating Account...
                       </>
                     ) : (
-                      "Create Account"
+                      `Create ${userType === "admin" ? "Admin" : "Staff"} Account`
                     )}
                   </button>
                 </form>
